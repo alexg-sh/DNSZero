@@ -52,7 +52,11 @@ const execWithSudo = async (
     // Provide icon for macOS dialog to enable 'Always Allow'
     const options: { name: string; icns?: string } = { name: 'DNS Switcher' };
     if (process.platform === 'darwin') {
-      options.icns = path.join(app.getAppPath(), 'assets', 'icon.icns');
+      const icnsPath = path.join(app.getAppPath(), 'assets', 'icon.icns');
+      // Only set icns if file exists, otherwise skip to avoid errors
+      if (fs.existsSync(icnsPath)) {
+        options.icns = icnsPath;
+      }
     }
     sudo.exec(command, options, (error: Error | null, stdout: string, stderr: string) => {
       if (error) {
@@ -100,7 +104,12 @@ const updateTrayMenu = () => {
         updateTrayMenu();
       }
     },
-    // ...existing menu items...
+    { 
+      label: 'Configure Passwordless Access', 
+      click: async () => {
+        await configureNoPassword();
+      }
+    },
     { label: 'Quit', click: () => app.quit() }
   ]);
 
