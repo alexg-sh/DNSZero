@@ -28,6 +28,16 @@
 
 import './index.css';
 
+// Add type definition for window.electron
+declare global {
+    interface Window {
+        electron: {
+            checkInternet: () => void;
+            onInternetStatus: (callback: (isOnline: boolean) => void) => void;
+        };
+    }
+}
+
 console.log('👋 This message is being logged by "renderer.ts", included via Vite');
 
 window.electron.checkInternet();

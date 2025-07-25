@@ -49,17 +49,18 @@ const execWithSudo = async (
   command: string
 ): Promise<{ success: boolean; output: string; error?: string }> => {
   return new Promise((resolve) => {
-    sudo.exec(
-      command,
-      { name: 'DNS Switcher' },
-      (error: Error | null, stdout: string, stderr: string) => {
-        if (error) {
-          console.error('sudo-prompt error:', error);
-          return resolve({ success: false, output: '', error: error.message });
-        }
-        resolve({ success: true, output: stdout });
+    // Provide icon for macOS dialog to enable 'Always Allow'
+    const options: { name: string; icns?: string } = { name: 'DNS Switcher' };
+    if (process.platform === 'darwin') {
+      options.icns = path.join(app.getAppPath(), 'assets', 'icon.icns');
+    }
+    sudo.exec(command, options, (error: Error | null, stdout: string, stderr: string) => {
+      if (error) {
+        console.error('sudo-prompt error:', error);
+        return resolve({ success: false, output: '', error: error.message });
       }
-    );
+      resolve({ success: true, output: stdout });
+    });
   });
 };
 
@@ -99,8 +100,7 @@ const updateTrayMenu = () => {
         updateTrayMenu();
       }
     },
-    { type: 'separator' },
-    { label: 'Always allow DNS changes', click: () => configureNoPassword() },
+    // ...existing menu items...
     { label: 'Quit', click: () => app.quit() }
   ]);
 
