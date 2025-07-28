@@ -49,15 +49,28 @@ const execWithSudo = async (
   command: string
 ): Promise<{ success: boolean; output: string; error?: string }> => {
   return new Promise((resolve) => {
-    // Provide icon for macOS dialog to enable 'Always Allow'
-    const options: { name: string; icns?: string } = { name: 'DNS Switcher' };
+    // For macOS, include proper options for Authorization Services
+    const options: any = { 
+      name: 'DNS Switcher'
+    };
+    
+    // On macOS, try to use the app icon for Authorization Services dialog
     if (process.platform === 'darwin') {
-      const icnsPath = path.join(app.getAppPath(), 'assets', 'icon.icns');
-      // Only set icns if file exists, otherwise skip to avoid errors
-      if (fs.existsSync(icnsPath)) {
-        options.icns = icnsPath;
+      // Try different icon paths
+      const possibleIconPaths = [
+        path.join(app.getAppPath(), 'assets', 'icon.icns'),
+        path.join(process.resourcesPath, 'icon.icns'),
+        '/System/Library/CoreServices/CoreTypes.bundle/Contents/Resources/NetworkIcon.icns'
+      ];
+      
+      for (const iconPath of possibleIconPaths) {
+        if (fs.existsSync(iconPath)) {
+          options.icns = iconPath;
+          break;
+        }
       }
     }
+    
     sudo.exec(command, options, (error: Error | null, stdout: string, stderr: string) => {
       if (error) {
         console.error('sudo-prompt error:', error);
@@ -226,14 +239,49 @@ const changeDns = async (dnsAddress: string) => {
 };
 
 const configureNoPassword = async () => {
-  const sudoersLine = `${process.env.USER} ALL=(ALL) NOPASSWD: ${'/usr/sbin/networksetup'} *`;
-  const command = `echo '${sudoersLine}' | sudo tee /etc/sudoers.d/dnsswitcher`;
-  const result = await execWithSudo(command);
-  if (result.success) {
-    console.log(`Sudoers entry installed, future DNS changes won't prompt for password`);
-    updateTrayMenu();
-  } else {
-    console.error('Failed to install sudoers entry:', result.error);
+  try {
+    // Create a more comprehensive sudoers rule
+    const networkSetupPath = '/usr/sbin/networksetup';
+    const sudoersContent = `# DNS Switcher - Allow networksetup without password
+${process.env.USER} ALL=(ALL) NOPASSWD: ${networkSetupPath}
+${process.env.USER} ALL=(ALL) NOPASSWD: ${networkSetupPath} *`;
+    
+    const tempFile = '/tmp/dnsswitcher_sudoers';
+    const commands = [
+      `echo '${sudoersContent}' > ${tempFile}`,
+      `visudo -c -f ${tempFile}`,
+      `cp ${tempFile} /etc/sudoers.d/dnsswitcher`,
+      `chmod 440 /etc/sudoers.d/dnsswitcher`,
+      `rm ${tempFile}`
+    ];
+    
+    const fullCommand = commands.join(' && ');
+    console.log('Configuring passwordless sudo for networksetup...');
+    
+    const result = await execWithSudo(fullCommand);
+    if (result.success) {
+      console.log('✅ Sudoers configuration successful! Future DNS changes won\'t require password.');
+      
+      // Show success notification
+      const { dialog } = require('electron');
+      dialog.showMessageBox({
+        type: 'info',
+        title: 'Success',
+        message: 'Passwordless DNS switching configured!',
+        detail: 'Future DNS changes will not require a password prompt.'
+      });
+      
+      updateTrayMenu();
+    } else {
+      console.error('Failed to configure sudoers:', result.error);
+      
+      // Show error notification
+      const { dialog } = require('electron');
+      dialog.showErrorBox('Configuration Failed', 
+        `Failed to configure passwordless access: ${result.error}`);
+    }
+  } catch (error) {
+    console.error('Error in configureNoPassword:', error);
   }
 };
 
